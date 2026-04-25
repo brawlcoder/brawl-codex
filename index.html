@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Brawl Codex</title>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html, body { margin: 0; background: #0d1438; }
+  /* hide content until React mounts to avoid FOUC */
+  #root:empty::before {
+    content: "Loading the Codex…";
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #ffd23f; font-family: system-ui, sans-serif; font-size: 18px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// ---------- Inline SVG icons (lucide-style) ----------
+const Svg = ({ size = 24, color = "currentColor", children }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+       viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"
+       strokeLinecap="round" strokeLinejoin="round">
+    {children}
+  </svg>
+);
+const Search = (p) => <Svg {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></Svg>;
+const Heart = (p) => <Svg {...p}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></Svg>;
+const Swords = (p) => <Svg {...p}><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/></Svg>;
+const Zap = (p) => <Svg {...p}><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></Svg>;
+const Crosshair = (p) => <Svg {...p}><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></Svg>;
+const Wind = (p) => <Svg {...p}><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></Svg>;
+const Star = (p) => <Svg {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></Svg>;
+const Wrench = (p) => <Svg {...p}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></Svg>;
+const Sparkles = (p) => <Svg {...p}><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></Svg>;
+const X = (p) => <Svg {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Svg>;
+
+// ---------- Embedded fallback dataset ----------
+const FALLBACK = [
+  { name: "Shelly", rarity: "Starting", role: "Damage Dealer",
+    desc: "Shelly's Super Shell unloads with great efficiency, sending enemies flying out of her way.",
+    health: 5800, damage: "2640 (8 × 330)", range: "Medium (7.67)", speed: "Normal",
+    sup: "Super Shell — Fires 9 large shells in a wide cone, dealing big damage and knocking enemies back.",
+    sp: [["Shell Shock","Super Shell slows enemies for 4 seconds."],["Band-Aid","When her HP drops low, instantly heals once per match."]],
+    gd: [["Fast Forward","Dashes a few tiles forward."],["Clay Pigeons","Next attack converges into a single high-damage shot."]],
+    hc: ["Max Out","Super pierces walls and gives an extra ammo."] },
+  { name: "Colt", rarity: "Rare", role: "Damage Dealer",
+    desc: "A sharpshooter sheriff who fires long rapid bullet bursts. Glass cannon, all about precision.",
+    health: 4400, damage: "2400 (6 × 400)", range: "Long (10)", speed: "Normal",
+    sup: "Bullet Storm — Unleashes a barrage of 12 bullets in a long line, shredding walls and enemies.",
+    sp: [["Slick Boots","Movement speed permanently increased."],["Magnum Special","Range and bullet speed permanently increased."]],
+    gd: [["Speedloader","Instantly reloads 2 ammo."],["Silver Bullet","Next shot pierces enemies and walls."]],
+    hc: ["Bulletstorm","Super becomes wider, longer, and stuns hit enemies briefly."] },
+  { name: "Bull", rarity: "Rare", role: "Tank",
+    desc: "A double-barreled bruiser who shreds at point-blank range and steamrolls anything close enough to hit.",
+    health: 9000, damage: "3360 (10 × 336)", range: "Short (5)", speed: "Normal",
+    sup: "Berserker Charge — Charges forward, smashing through walls and bowling over enemies.",
+    sp: [["Berserker","Reload speed boosted when below 60% HP."],["Tough Guy","Gains a damage-reducing shield when HP is low."]],
+    gd: [["T-Bone Injector","Instantly heals a chunk of HP."],["Stomper","Lays a mine that explodes when stepped on."]],
+    hc: ["Bear With Me","Super becomes longer, faster, and shields him during the charge."] },
+  { name: "Brock", rarity: "Rare", role: "Marksman",
+    desc: "A rocket-launching diva who lobs explosive ordnance from outside enemy range.",
+    health: 4000, damage: "1860", range: "Very Long (11)", speed: "Normal",
+    sup: "Rocket Rain — Fires nine rockets in a wide area, devastating turf and enemies alike.",
+    sp: [["More Rockets!","Super fires an extra rocket."],["Rocket No. 4","Main attack fires an extra rocket."]],
+    gd: [["Rocket Laces","Launches Brock into the air, then crashes down with damage."],["Rocket Fuel","Next attack is a giant rocket with massive damage."]],
+    hc: ["Rocket Barrage","Super covers more area, fires more rockets, and knocks enemies back."] },
+  { name: "Jessie", rarity: "Rare", role: "Controller",
+    desc: "A scrappy inventor whose ricocheting shots and turret pet zone the battlefield.",
+    health: 4800, damage: "1820", range: "Medium (8)", speed: "Normal",
+    sup: "Scrappy! — Deploys an electric turret that auto-targets enemies.",
+    sp: [["Energize","Main attack heals her own turret."],["Shocky","Turret shots chain-zap nearby enemies."]],
+    gd: [["Spark Plug","Turret emits a shockwave that knocks enemies back."],["Recoil Spring","Turret leaps onto Jessie's location."]],
+    hc: ["Volt-Age","Super deploys a stronger turret that briefly stuns enemies on hit."] },
+  { name: "Nita", rarity: "Rare", role: "Damage Dealer",
+    desc: "A wild child who summons a giant bear to maul anything in its path.",
+    health: 5600, damage: "1560", range: "Medium (7.33)", speed: "Normal",
+    sup: "Overbearing — Summons Bruce, a big shaggy bear that auto-attacks enemies.",
+    sp: [["Bear With Me","Nita and her bear heal each other when attacking."],["Hyper Bear","Bear's attacks shake the ground, stunning enemies briefly."]],
+    gd: [["Bear Paws","Bruce roars, slowing nearby enemies."],["Faux Fur","Bruce gains a damage-reducing shield."]],
+    hc: ["Big Hug","Super becomes a larger, faster, beefier bear."] },
+  { name: "Dynamike", rarity: "Rare", role: "Marksman",
+    desc: "A cranky old prospector who lobs sticks of dynamite over walls.",
+    health: 3200, damage: "2 × 1320", range: "Long (9.67)", speed: "Normal",
+    sup: "Big Barrel of Boom — Hurls a giant TNT barrel that destroys walls and enemies.",
+    sp: [["Dyna-Jump","Self-explosions launch Mike into the air."],["Demolition","Super deals massive bonus damage."]],
+    gd: [["Fidget Spinner","Throws three smaller bombs in a fan pattern."],["Satchel Charge","Throws a bomb that pulls enemies in before exploding."]],
+    hc: ["Boom Boom Boom","Super splits into multiple smaller TNT barrels."] },
+  { name: "Piper", rarity: "Epic", role: "Marksman",
+    desc: "An elegant sniper whose damage scales with distance — long shots devastate.",
+    health: 3200, damage: "1300 → 2600 (by range)", range: "Very Long (11.33)", speed: "Normal",
+    sup: "Poppin' — Drops grenades behind her as she leaps to safety.",
+    sp: [["Ambush","Hidden in a bush, attacks deal extra damage."],["Snappy Sniping","Reloads ammo when landing a shot."]],
+    gd: [["Auto Aimer","Fires a homing shot that locks onto an enemy."],["Homemade Recipe","Drops a giant grenade at her feet that detonates after a delay."]],
+    hc: ["Granny's Surprise","Super drops bigger grenades and pushes her further away."] },
+  { name: "Spike", rarity: "Legendary", role: "Damage Dealer",
+    desc: "A rare desert cactus who launches spike grenades that fragment in all directions.",
+    health: 3200, damage: "1380", range: "Long (9.67)", speed: "Normal",
+    sup: "Stick Around! — Throws a thorny field that slows and damages enemies inside.",
+    sp: [["Fertilize","Heals himself while standing in his Super."],["Curveball","Spikes from his attack curve into a tighter pattern."]],
+    gd: [["Popping Pincushion","Fires spikes in all directions around himself."],["Life Plant","Plants a cactus that heals nearby allies."]],
+    hc: ["Catcus Power","Super becomes larger and follows Spike around."] },
+  { name: "Crow", rarity: "Legendary", role: "Assassin",
+    desc: "A cold-blooded assassin who poisons foes and pecks them to death from range.",
+    health: 3360, damage: "3 × 380", range: "Long (8.67)", speed: "Very Fast",
+    sup: "Swoop — Leaps into the air and rains poisoned daggers down on landing.",
+    sp: [["Extra Toxic","Poisoned enemies deal less damage."],["Carrion Crow","Deals bonus damage to enemies below 50% HP."]],
+    gd: [["Defense Booster","Briefly takes reduced damage."],["Slowing Toxin","Poisoned enemies move slower."]],
+    hc: ["Have at Thee!","Super covers more ground and applies stronger poison."] },
+  { name: "Leon", rarity: "Legendary", role: "Assassin",
+    desc: "A spike-throwing chameleon who turns invisible to flank and finish.",
+    health: 3640, damage: "4 × 480", range: "Medium (7)", speed: "Normal",
+    sup: "Smoke Bomb — Becomes invisible for several seconds, ideal for ambush or escape.",
+    sp: [["Smoke Trails","Movement speed increased while in Super."],["Invisiheal","Slowly heals while invisible."]],
+    gd: [["Clone Projector","Spawns a fake decoy of Leon."],["Lollipop Drop","Drops a lollipop that grants vision in bushes."]],
+    hc: ["Spice Up","Super lasts longer, heals him, and slows nearby enemies."] },
+  { name: "El Primo", rarity: "Super Rare", role: "Tank",
+    desc: "A four-time wrestling champion who throws molten fists and body-slams from the sky.",
+    health: 9600, damage: "4 × 540", range: "Very Short (2.67)", speed: "Fast",
+    sup: "Flying Elbow Drop — Leaps high and crashes down, damaging and knocking back enemies.",
+    sp: [["El Fuego","Fire damage burns enemies for several seconds."],["Meteor Rush","Movement speed boosted briefly after using Super."]],
+    gd: [["Suplex Supplement","Grabs an enemy and throws them behind him."],["Asteroid Belt","Super radius increased and rains rocks."]],
+    hc: ["Shooting Star","Super hits harder, lands faster, and bounces multiple times."] },
+  { name: "Frank", rarity: "Epic", role: "Tank",
+    desc: "A massive ghost in headphones who slams a hammer to send shockwaves through walls.",
+    health: 11200, damage: "2240", range: "Medium (6.67)", speed: "Slow",
+    sup: "Stunning Strike — Slams the ground with a wave that stuns and damages all enemies.",
+    sp: [["Power Grab","Defeating an enemy permanently boosts his damage during the match."],["Sponge","Maximum HP increased."]],
+    gd: [["Active Noise Canceling","Removes negative effects and gains a shield."],["Irresistible Attraction","Pulls all nearby enemies toward him."]],
+    hc: ["Hype","Super hits twice and stuns longer."] },
+  { name: "Bibi", rarity: "Epic", role: "Tank",
+    desc: "A baseball-batting bubblegum brawler who launches enemies on charged hits.",
+    health: 8400, damage: "1740 / 2860 charged", range: "Short (4)", speed: "Normal",
+    sup: "Spitballer — Spits a bouncy gum ball that ricochets between enemies.",
+    sp: [["Home Run","Movement speed increased while her bat is charged."],["Batting Stance","Gains a shield when bat is charged."]],
+    gd: [["Vitamin Booster","Heals herself instantly."],["Out Of Nowhere","Knocks back nearby enemies and lands a charged hit."]],
+    hc: ["Triple Bubble","Super shoots three giant gum balls."] },
+  { name: "Mortis", rarity: "Mythic", role: "Assassin",
+    desc: "A dapper undertaker who dashes through enemies with his shovel, draining life on hit.",
+    health: 4760, damage: "1480", range: "Very Short (2.33)", speed: "Fast",
+    sup: "Life Blood — Releases a swarm of bats that damage and heal him.",
+    sp: [["Creepy Harvest","Killing an enemy heals a large chunk of HP."],["Coiled Snake","Charged dashes deal extra damage."]],
+    gd: [["Combo Spinner","Spins his shovel, hitting enemies in all directions."],["Survival Shovel","Shields him briefly and increases speed."]],
+    hc: ["Direct Hit","Super deals damage on cast and bats home in faster."] },
+  { name: "Edgar", rarity: "Epic", role: "Assassin",
+    desc: "A moody teen with attitude problems who leaps onto enemies and slashes with chained scarves.",
+    health: 6300, damage: "1380", range: "Very Short (2.5)", speed: "Fast",
+    sup: "Let's Fly — Leaps over walls onto a target location, ready to brawl.",
+    sp: [["Hard Landing","Super deals damage on impact."],["Fisticuffs","Lifesteal increased on attacks."]],
+    gd: [["Hardcore","Heals and gains attack speed for a short time."],["Let's Fly Higher","Increases the range of his next jump."]],
+    hc: ["No Stress","Super charges much faster and grants a shield on landing."] },
+  { name: "Sandy", rarity: "Legendary", role: "Support",
+    desc: "A sleepy desert wanderer who whips up sandstorms that hide allies and blind enemies.",
+    health: 4800, damage: "3 × 740", range: "Medium (8)", speed: "Normal",
+    sup: "Sweet Dreams — Conjures a sandstorm that hides allies and damages enemies inside.",
+    sp: [["Rude Sands","Sandstorm damages enemies caught inside."],["Sweet Dreams","Enemies inside the storm fall asleep briefly."]],
+    gd: [["Sleep Stimulator","Triples Super charge for a few seconds."],["Sweet Dreams","Replaces Super with a sleep-only version."]],
+    hc: ["Dust Storm","Sandstorm becomes wider and moves toward enemies."] },
+  { name: "Tara", rarity: "Mythic", role: "Damage Dealer",
+    desc: "A mystic seer whose tarot cards pierce through enemies and predict their doom.",
+    health: 4400, damage: "3 × 760", range: "Long (8.33)", speed: "Normal",
+    sup: "Gravity — Opens a black hole that pulls enemies in and damages them.",
+    sp: [["Black Portal","Black hole spawns a shadow Tara that fights for her."],["Psychic Enhancer","Damaged enemies are revealed even in bushes."]],
+    gd: [["Support From Beyond","Heals nearby allies."],["Psycho Stomp","Pulls enemies toward Tara and stuns them briefly."]],
+    hc: ["Dimension Hop","Super pulls enemies harder and lasts longer."] },
+  { name: "Pam", rarity: "Epic", role: "Support",
+    desc: "A no-nonsense matriarch who deploys a healing turret and sprays scrap with her launcher.",
+    health: 7200, damage: "9 × 240", range: "Medium (7.33)", speed: "Normal",
+    sup: "Mama's Kiss — Deploys a healing station that restores HP to her and allies.",
+    sp: [["Mama's Hug","Healing station heals more per pulse."],["Mama's Squeeze","Defeating enemies heals herself."]],
+    gd: [["Pulse Modulator","Healing station emits a knockback pulse."],["Scrapsucker","Steals scrap from a nearby enemy, healing herself."]],
+    hc: ["Mama's Touch","Healing station heals more, lasts longer, and damages enemies near it."] },
+  { name: "Mandy", rarity: "Mythic", role: "Marksman",
+    desc: "A candy shop sniper whose focused beam of sweetness reaches across the entire map.",
+    health: 4400, damage: "1700", range: "Very Long (11.33)", speed: "Normal",
+    sup: "Sweet Dreams — Fires a focused beam of light over a massive distance.",
+    sp: [["In My Sights","Standing still extends her attack range."],["Caramelize","Super beam slows enemies caught in it."]],
+    gd: [["Cookie Crumbs","Drops cookies on the ground that reveal bushes."],["Sugar Rush","Boosts attack speed for a few seconds."]],
+    hc: ["Bittersweet","Super lasts longer, deals more damage, and pierces walls."] },
+  { name: "Cordelius", rarity: "Mythic", role: "Assassin",
+    desc: "A gloomy funguy who sends targets to the Shadow Realm for a one-on-one duel.",
+    health: 4400, damage: "3 × 700", range: "Medium (5)", speed: "Normal",
+    sup: "Shadow Realm — Banishes himself and a target into a shadow dimension to duel alone.",
+    sp: [["Mush-Boom","Mushrooms explode when destroyed."],["Discordant Mushrooms","Mushrooms slow enemies who walk through them."]],
+    gd: [["Shroom Boom","Plants three mushrooms in a row."],["Poisonous Mushroom","Plants a mushroom that damages enemies that touch it."]],
+    hc: ["Mushroom Cloud","Super lasts longer and Cordelius is healed inside the realm."] },
+  { name: "Surge", rarity: "Legendary", role: "Damage Dealer",
+    desc: "A party-bot whose attacks supercharge him through three power stages mid-match.",
+    health: 4400, damage: "1080 → 1620 (staged)", range: "Medium (7.33)", speed: "Normal",
+    sup: "Upgrade — Levels himself up, gaining new attack properties at each stage.",
+    sp: [["To The Max","Starts the match at Stage 1."],["Serve Ice Cold","Super resets when defeating an enemy."]],
+    gd: [["Power Surge","Permanently boosts a stage for the rest of the match."],["Power Shield","Briefly takes reduced damage."]],
+    hc: ["Party Trick","Super grants an extra stage with new effects."] },
+  { name: "Pearl", rarity: "Epic", role: "Damage Dealer",
+    desc: "A sentient cookie who heats up over time, dealing more damage the longer she fires.",
+    health: 4800, damage: "720 → 2160 (heated)", range: "Long (9.33)", speed: "Normal",
+    sup: "Cookie Bomb — Throws a hot cookie that explodes and damages enemies.",
+    sp: [["Steamed!","Damage heat lingers longer."],["Hard Baked","Permanently increases damage at peak heat."]],
+    gd: [["Made With Love","Drops a cookie that heals allies."],["Overcooked","Heats herself instantly to peak temperature."]],
+    hc: ["Heatwave","Super splits into multiple cookies that scatter."] },
+  { name: "Hank", rarity: "Mythic", role: "Tank",
+    desc: "A lovestruck whale-mech pilot who charges up massive torpedo blasts.",
+    health: 8400, damage: "Up to 4500 (charged)", range: "Long (7)", speed: "Slow",
+    sup: "Big Hug — Releases proximity bombs in a circle around himself.",
+    sp: [["It's Gonna Blow!","Charged shots become more powerful."],["Take Cover!","Gains a shield while charging."]],
+    gd: [["Water Balloons","Drops water balloons in a line behind him."],["Barreling Bubble","Encases himself in a bubble that pushes enemies away."]],
+    hc: ["Whale Whisperer","Super spawns extra mines that home toward enemies."] },
+  { name: "Kit", rarity: "Legendary", role: "Support",
+    desc: "A mischievous kitten who can leap onto allies to ride them, or pin enemies into submission.",
+    health: 4800, damage: "3 × 200", range: "Medium (7.67)", speed: "Normal",
+    sup: "Pounce — Leaps onto a target. On allies, becomes a turret and heals them. On enemies, pins them down.",
+    sp: [["Overshare","Riding allies heals them over time."],["Hidden Stash","Receives ammo when defeating enemies."]],
+    gd: [["Stay Still!","Pinned enemies take more damage."],["Plushie Toss","Throws a plushie that distracts an enemy turret."]],
+    hc: ["Cat-tastic!","Super pin lasts longer and applies stun effects."] },
+];
+
+const RARITY_STYLE = {
+  "Starting":   { c: "#a8aab5", glow: "#a8aab5" },
+  "Rare":       { c: "#21d44e", glow: "#21d44e" },
+  "Super Rare": { c: "#36b3ff", glow: "#36b3ff" },
+  "Epic":       { c: "#b96bff", glow: "#b96bff" },
+  "Mythic":     { c: "#ff3d6e", glow: "#ff3d6e" },
+  "Legendary":  { c: "#ffd23f", glow: "#ffd23f" },
+};
+
+// ---------- App ----------
+function BrawlCodex() {
+  const [data, setData] = useState(FALLBACK);
+  const [source, setSource] = useState("local");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(FALLBACK[0]);
+  const [showDrop, setShowDrop] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const r = await fetch("https://api.brawlify.com/v1/brawlers", { mode: "cors" });
+        if (!r.ok) throw new Error("bad status");
+        const j = await r.json();
+        if (dead || !j?.list?.length) return;
+        const live = j.list.map((b) => ({
+          name: b.name,
+          rarity: b.rarity?.name ?? "Starting",
+          role: b.class?.name ?? "Brawler",
+          desc: b.description || "A Brawl Stars character.",
+          health: "—", damage: "—", range: "—", speed: "—",
+          sup: b.starPowers?.length ? "See abilities below" : "—",
+          sp: (b.starPowers || []).map((s) => [s.name, (s.description || "").replace(/\n/g, " ")]),
+          gd: (b.gadgets || []).map((s) => [s.name, (s.description || "").replace(/\n/g, " ")]),
+          hc: b.hypercharge ? [b.hypercharge.name || "Hypercharge", b.hypercharge.description || ""] : null,
+          img: b.imageUrl || b.imageUrl2 || null,
+        }));
+        const byName = new Map(FALLBACK.map((x) => [x.name.toLowerCase(), x]));
+        const merged = live.map((x) => {
+          const fb = byName.get(x.name.toLowerCase());
+          return fb ? { ...x, ...fb, img: x.img } : x;
+        });
+        setData(merged);
+        setSelected(merged.find((x) => x.name === "Shelly") || merged[0]);
+        setSource("live");
+      } catch (e) { /* keep fallback silently */ }
+    })();
+    return () => { dead = true; };
+  }, []);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return data
+      .filter((b) => b.name.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const ai = a.name.toLowerCase().indexOf(q);
+        const bi = b.name.toLowerCase().indexOf(q);
+        return ai - bi || a.name.localeCompare(b.name);
+      })
+      .slice(0, 8);
+  }, [query, data]);
+
+  function pick(b) {
+    setSelected(b);
+    setQuery("");
+    setShowDrop(false);
+    setHighlight(0);
+    inputRef.current?.blur();
+  }
+
+  function onKey(e) {
+    if (!showDrop || !matches.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlight((h) => (h + 1) % matches.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => (h - 1 + matches.length) % matches.length); }
+    else if (e.key === "Enter") { e.preventDefault(); pick(matches[highlight]); }
+    else if (e.key === "Escape") { setShowDrop(false); }
+  }
+
+  return (
+    <div style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+         className="min-h-screen w-full text-amber-50 relative overflow-hidden">
+      <div className="absolute inset-0 -z-10"
+           style={{ background: "radial-gradient(1200px 700px at 15% -10%, #3b1d6f 0%, transparent 60%), radial-gradient(900px 600px at 110% 10%, #ff3d8a40 0%, transparent 55%), linear-gradient(180deg, #0d1438 0%, #1a0f3a 60%, #0d1438 100%)" }} />
+      <div className="absolute inset-0 -z-10 opacity-[0.08] pointer-events-none"
+           style={{ backgroundImage: "repeating-linear-gradient(45deg, #fff 0 1px, transparent 1px 14px)" }} />
+
+      <header className="px-6 md:px-10 pt-8 md:pt-12 pb-4 max-w-6xl mx-auto">
+        <div className="flex items-end gap-4 flex-wrap">
+          <h1 className="leading-none"
+              style={{ fontFamily: "'Lilita One', cursive", fontSize: "clamp(2.4rem, 6vw, 4.5rem)",
+                       color: "#ffd23f", textShadow: "0 4px 0 #b8860b, 0 8px 24px #ffd23f55, 0 0 1px #000",
+                       letterSpacing: "0.5px" }}>
+            BRAWL CODEX
+          </h1>
+          <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
+                style={{ background: source === "live" ? "#21d44e" : "#ffd23f", color: "#0d1438" }}>
+            {source === "live" ? "Live · Brawlify" : "Local Codex"}
+          </span>
+        </div>
+        <p className="mt-2 text-amber-50/70 text-sm md:text-base max-w-2xl">
+          Type a brawler's name. Hit enter. See every feature — stats, super, star powers, gadgets, hypercharge.
+        </p>
+      </header>
+
+      <section className="px-6 md:px-10 max-w-6xl mx-auto relative">
+        <div className="relative" onBlur={() => setTimeout(() => setShowDrop(false), 120)}>
+          <div className="flex items-center gap-3 px-5 py-4 rounded-2xl border-2"
+               style={{ background: "#0d1438cc", borderColor: "#ffd23f", boxShadow: "0 8px 0 #b8860b, 0 0 0 4px #0d143855" }}>
+            <Search size={22} color="#ffd23f" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setShowDrop(true); setHighlight(0); }}
+              onFocus={() => query && setShowDrop(true)}
+              onKeyDown={onKey}
+              placeholder="Try: Shelly, Mortis, Spike…"
+              className="flex-1 bg-transparent outline-none text-lg md:text-xl placeholder-amber-50/40"
+              style={{ fontWeight: 600, color: "#fff8e1" }}
+            />
+            {query && (
+              <button onClick={() => { setQuery(""); inputRef.current?.focus(); }}
+                      className="p-1 rounded-full hover:bg-white/10" aria-label="clear">
+                <X size={18} color="#ffd23f" />
+              </button>
+            )}
+          </div>
+
+          {showDrop && matches.length > 0 && (
+            <div className="absolute left-0 right-0 mt-2 rounded-2xl overflow-hidden z-20 border-2"
+                 style={{ background: "#1a0f3aee", borderColor: "#ffd23f88", backdropFilter: "blur(8px)" }}>
+              {matches.map((m, i) => {
+                const r = RARITY_STYLE[m.rarity] || RARITY_STYLE.Starting;
+                return (
+                  <button key={m.name}
+                          onMouseDown={(e) => { e.preventDefault(); pick(m); }}
+                          onMouseEnter={() => setHighlight(i)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                          style={{ background: i === highlight ? "#ffd23f1a" : "transparent",
+                                   borderLeft: `4px solid ${r.c}` }}>
+                    <Avatar name={m.name} color={r.c} size={36} img={m.img} />
+                    <div className="flex-1">
+                      <div className="font-bold">{m.name}</div>
+                      <div className="text-xs opacity-70">{m.rarity} · {m.role}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {showDrop && query.trim() && matches.length === 0 && (
+            <div className="absolute left-0 right-0 mt-2 px-4 py-3 rounded-2xl border-2"
+                 style={{ background: "#1a0f3aee", borderColor: "#ff3d8a88" }}>
+              <span className="text-amber-50/80">No brawler matches "<b>{query}</b>". Try another spelling.</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {["Shelly","Colt","Mortis","Spike","Crow","Leon","Frank","Mandy","Cordelius","Pearl"]
+            .filter((n) => data.find((b) => b.name === n))
+            .map((n) => (
+              <button key={n} onClick={() => pick(data.find((b) => b.name === n))}
+                      className="text-xs px-3 py-1.5 rounded-full font-semibold transition-transform hover:-translate-y-0.5"
+                      style={{ background: "#ffd23f1a", color: "#ffd23f", border: "1px solid #ffd23f55" }}>
+                {n}
+              </button>
+            ))}
+        </div>
+      </section>
+
+      <main className="px-6 md:px-10 max-w-6xl mx-auto pb-20 mt-8">
+        <BrawlerCard b={selected} />
+      </main>
+
+      <footer className="px-6 md:px-10 max-w-6xl mx-auto pb-10 text-xs text-amber-50/40">
+        Toy project · Stats are approximate at Power Level 11 · Brawl Stars is a trademark of Supercell.
+      </footer>
+    </div>
+  );
+}
+
+function BrawlerCard({ b }) {
+  if (!b) return null;
+  const r = RARITY_STYLE[b.rarity] || RARITY_STYLE.Starting;
+  return (
+    <article className="relative rounded-3xl border-2 overflow-hidden"
+             style={{ background: "linear-gradient(180deg, #1a0f3acc 0%, #0d1438ee 100%)",
+                      borderColor: r.c,
+                      boxShadow: `0 0 0 4px #0d143855, 0 12px 40px ${r.glow}33, 0 6px 0 ${r.c}55` }}>
+      <div className="p-6 md:p-8 flex items-start gap-5 md:gap-7"
+           style={{ background: `radial-gradient(400px 300px at 0% 0%, ${r.c}22 0%, transparent 60%)` }}>
+        <Avatar name={b.name} color={r.c} size={96} img={b.img} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider"
+                  style={{ background: r.c, color: "#0d1438" }}>{b.rarity}</span>
+            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider"
+                  style={{ background: "#ffffff15", color: "#fff", border: "1px solid #ffffff30" }}>{b.role}</span>
+          </div>
+          <h2 className="mt-2 leading-none"
+              style={{ fontFamily: "'Lilita One', cursive",
+                       fontSize: "clamp(2rem, 5vw, 3.4rem)",
+                       color: "#fff",
+                       textShadow: `0 3px 0 ${r.c}, 0 6px 16px ${r.glow}66` }}>
+            {b.name.toUpperCase()}
+          </h2>
+          <p className="mt-3 text-amber-50/85 max-w-2xl">{b.desc}</p>
+        </div>
+      </div>
+
+      <div className="px-6 md:px-8 pb-2 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Stat icon={<Heart size={18} />} label="Health" value={fmt(b.health)} color="#ff3d6e" />
+        <Stat icon={<Swords size={18} />} label="Damage" value={fmt(b.damage)} color="#ff8a3d" />
+        <Stat icon={<Crosshair size={18} />} label="Range" value={fmt(b.range)} color="#36b3ff" />
+        <Stat icon={<Wind size={18} />} label="Speed" value={fmt(b.speed)} color="#21d44e" />
+      </div>
+
+      <Section icon={<Zap size={18} />} title="Super" accent="#ffd23f">
+        <p className="text-amber-50/90">{b.sup || "—"}</p>
+      </Section>
+
+      {b.sp?.length > 0 && (
+        <Section icon={<Star size={18} />} title="Star Powers" accent="#ffd23f">
+          <div className="grid md:grid-cols-2 gap-3">
+            {b.sp.map(([n, d]) => <Bullet key={n} title={n} body={d} accent="#ffd23f" />)}
+          </div>
+        </Section>
+      )}
+
+      {b.gd?.length > 0 && (
+        <Section icon={<Wrench size={18} />} title="Gadgets" accent="#21d44e">
+          <div className="grid md:grid-cols-2 gap-3">
+            {b.gd.map(([n, d]) => <Bullet key={n} title={n} body={d} accent="#21d44e" />)}
+          </div>
+        </Section>
+      )}
+
+      {b.hc && (
+        <Section icon={<Sparkles size={18} />} title="Hypercharge" accent="#ff3d8a">
+          <Bullet title={b.hc[0]} body={b.hc[1]} accent="#ff3d8a" rainbow />
+        </Section>
+      )}
+    </article>
+  );
+}
+
+function Stat({ icon, label, value, color }) {
+  return (
+    <div className="rounded-xl px-4 py-3 border" style={{ background: "#ffffff08", borderColor: "#ffffff14" }}>
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wider opacity-80" style={{ color }}>
+        {icon} {label}
+      </div>
+      <div className="mt-1 font-bold text-lg leading-tight" style={{ fontFamily: "'Lilita One', cursive", letterSpacing: "0.5px" }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Section({ icon, title, accent, children }) {
+  return (
+    <section className="px-6 md:px-8 py-5 border-t" style={{ borderColor: "#ffffff14" }}>
+      <h3 className="flex items-center gap-2 mb-3 uppercase tracking-wider text-sm"
+          style={{ fontFamily: "'Lilita One', cursive", color: accent, letterSpacing: "1px" }}>
+        <span style={{ color: accent }}>{icon}</span> {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function Bullet({ title, body, accent, rainbow }) {
+  return (
+    <div className="rounded-xl p-3 pl-4 border-l-4"
+         style={{
+           background: rainbow ? "linear-gradient(90deg, #ff3d8a14, #ffd23f14, #36b3ff14)" : "#ffffff08",
+           borderColor: accent
+         }}>
+      <div className="font-bold" style={{ color: "#fff" }}>{title}</div>
+      <div className="text-sm opacity-85 mt-1">{body || "—"}</div>
+    </div>
+  );
+}
+
+function Avatar({ name, color, size, img }) {
+  const [broken, setBroken] = useState(false);
+  if (img && !broken) {
+    return (
+      <div className="rounded-2xl overflow-hidden flex-shrink-0"
+           style={{ width: size, height: size, border: `3px solid ${color}`, background: "#0d1438" }}>
+        <img src={img} alt={name} onError={() => setBroken(true)}
+             style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+    );
+  }
+  const letter = (name && name[0]) ? name[0].toUpperCase() : "?";
+  return (
+    <div className="rounded-2xl flex items-center justify-center flex-shrink-0 relative"
+         style={{ width: size, height: size, background: `linear-gradient(135deg, ${color} 0%, ${color}aa 100%)`,
+                  border: `3px solid #ffffff22`,
+                  boxShadow: `inset 0 -6px 0 #00000033, 0 4px 0 ${color}88` }}>
+      <span style={{ fontFamily: "'Lilita One', cursive", fontSize: size * 0.5, color: "#0d1438",
+                     textShadow: "0 2px 0 #ffffff44" }}>
+        {letter}
+      </span>
+    </div>
+  );
+}
+
+function fmt(v) {
+  if (v == null || v === "—") return "—";
+  return String(v);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<BrawlCodex />);
+</script>
+</body>
+</html>
